@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -16,8 +17,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Xaml;
 using Commons.Music.Midi;
-using HidSharp;
-using HidSharp.Reports;
+using WootingAnalogSDKNET;
 
 namespace WootingMidi
 {
@@ -166,27 +166,26 @@ namespace WootingMidi
             SendCc = _settings.SendCc;
 
             UpdateMidi();
-            UpdateHid();
-            DeviceList.Local.Changed += (sender, args) => UpdateHid();
-
+            WootingAnalogResult res;
+            if ((res = WootingAnalogSDK.Initialise()) != WootingAnalogResult.Ok)
+            {
+                System.Windows.MessageBox.Show("Could not initialize sdk, Error: " + res.ToString());
+                Environment.Exit(0);
+            }
+            WootingAnalogSDK.SetKeycodeMode(KeycodeType.VirtualKey);
             _loaded = true;
 
             Task.Factory.StartNew(() =>
             {
                 while (true)
                 {
-                    if (_hidStream == null)
-                    {
-                        Thread.Sleep(100);
-                        continue;
-                    }
                     try
                     {
-                        var bytes = _hidStream.Read();
-                        if (bytes.Length < 2) continue;
+                        (List<(short, float)> buffer, WootingAnalogResult result) = WootingAnalogSDK.ReadFullBuffer(50);
+
+                        //if (buffer.Count == 0) continue;
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            if (_hidStream == null) return;
                             foreach (var cc in CcPresses.Values)
                             {
                                 cc.Press = 0.0;
@@ -196,28 +195,27 @@ namespace WootingMidi
                             {
                                 _keyPress[i] = 0;
                             }
-                            for (int i = 0; i < (bytes.Length - 1) / 2; i++)
+                            foreach ((short key, float value) in buffer)
                             {
-                                int ii = i * 2 + 1;
-                                if(bytes[ii] == 0) continue;
-                                if (CcPresses.ContainsKey(bytes[ii]))
+                                Keys vKey = (Keys)key;
+                                if (CcPresses.ContainsKey(key))
                                 {
-                                    CcPresses[bytes[ii]].KeyCode = bytes[ii].ToString();
-                                    CcPresses[bytes[ii]].Press = (((double) bytes[ii + 1]) / 255.0) * 100.0;
+                                    CcPresses[key].KeyCode = vKey.ToString();
+                                    CcPresses[key].Press = value * 100.0;
                                 }
                                 else
                                 {
-                                    CcPresses.Add(bytes[ii], new CcKeyPress()
+                                    CcPresses.Add(key, new CcKeyPress()
                                     {
-                                        KeyCode = bytes[ii].ToString(),
-                                        Press = (((double)bytes[ii + 1]) / 255.0) * 100.0
+                                        KeyCode = vKey.ToString(),
+                                        Press = value * 100.0
                                     });
                                 }
 
-                                if (_keyIndex.Contains(bytes[ii]))
+                                if (_keyIndex.Contains(vKey))
                                 {
-                                    var ki = _keyIndex.IndexOf(bytes[ii]);
-                                    _keyPress[ki] = (((double) bytes[ii + 1]) / 255.0);
+                                    var ki = _keyIndex.IndexOf(vKey);
+                                    _keyPress[ki] = value;
                                 }
                             }
 
@@ -251,9 +249,8 @@ namespace WootingMidi
             });
         }
 
-        private IMidiPortDetails[] _midiOutDetails;
-        private HidDevice[] _hidDevices;
-        private readonly List<byte> _keyIndex = new List<byte> { 65, 50, 66, 51, 67, 68, 53, 69, 54, 70, 55, 71, 34, 19, 35, 20, 36, 37, 22, 38, 23, 39, 24, 40 };
+        private IMidiPortDetails[] _midiOutDetails;//{ 65, 50, 66, 51, 67, 68, 53, 69, 54, 70, 55, 71, 34, 19, 35, 20, 36, 37, 22, 38, 23, 39, 24, 40 };
+        private readonly List<Keys> _keyIndex = new List<Keys> { Keys.Z, Keys.S, Keys.X, Keys.D, Keys.C, Keys.V, Keys.G, Keys.B, Keys.H, Keys.N, Keys.J, Keys.M, Keys.W, Keys.D3, Keys.E, Keys.D4, Keys.R, Keys.T, Keys.D6, Keys.Y, Keys.D7, Keys.U, Keys.D8, Keys.I };
         private readonly double[] _keyPress = new double[24];
         private string _lowOctKeys = "ZSXDCVGBHNJM";
         private string _highOctKeys = "W3E4RT6Y7U8I";
@@ -321,7 +318,7 @@ namespace WootingMidi
             MidiSelect.SelectedItem = _settings.MidiDevice;
         }
 
-        private void UpdateHid()
+        /*private void UpdateHid()
         {
             if (_hidStream != null)
             {
@@ -355,11 +352,9 @@ namespace WootingMidi
                 HidStatus.Fill = new SolidColorBrush(Color.FromRgb(255, 0, 0));
                 _hidDevice = null;
             }
-        }
+        }*/
 
         private IMidiOutput _midiDevice;
-        private HidDevice _hidDevice;
-        private HidStream _hidStream;
 
         private void OnMidiSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -403,7 +398,7 @@ namespace WootingMidi
             base.OnPropertyChanged(e);
         }
 
-        private void OnListKeyDown(object sender, KeyEventArgs e)
+        private void OnListKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             e.Handled = true;
         }
