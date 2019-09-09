@@ -186,11 +186,11 @@ namespace WootingMidi
                         //if (buffer.Count == 0) continue;
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
+
                             foreach (var cc in CcPresses.Values)
                             {
                                 cc.Press = 0.0;
                             }
-                            HidStatus.Fill = new SolidColorBrush(Color.FromRgb(0, 255, 0));
                             for (int i = 0; i < 24; i++)
                             {
                                 _keyPress[i] = 0;
@@ -198,6 +198,7 @@ namespace WootingMidi
 
                             if (result == WootingAnalogResult.Ok)
                             {
+                                HidStatus.Fill = new SolidColorBrush(Color.FromRgb(0, 255, 0));
 
                                 foreach ((short key, float value) in buffer)
                                 {
@@ -238,6 +239,10 @@ namespace WootingMidi
 
                                 LowOctave.UpdateBars(_notes, looffs);
                                 HighOctave.UpdateBars(_notes, hioffs);
+                            }
+                            else
+                            {
+                                HidStatus.Fill = new SolidColorBrush(Color.FromRgb(255, 0, 0));
                             }
                         }));
                         if (result != WootingAnalogResult.Ok)
