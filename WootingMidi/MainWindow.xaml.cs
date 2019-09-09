@@ -167,7 +167,7 @@ namespace WootingMidi
 
             UpdateMidi();
             WootingAnalogResult res;
-            if ((res = WootingAnalogSDK.Initialise()) != WootingAnalogResult.Ok)
+            if ((res = WootingAnalogSDK.Initialise()) != WootingAnalogResult.Ok && res != WootingAnalogResult.NoDevices)
             {
                 System.Windows.MessageBox.Show("Could not initialize sdk, Error: " + res.ToString());
                 Environment.Exit(0);
@@ -195,46 +195,53 @@ namespace WootingMidi
                             {
                                 _keyPress[i] = 0;
                             }
-                            foreach ((short key, float value) in buffer)
+
+                            if (result == WootingAnalogResult.Ok)
                             {
-                                Keys vKey = (Keys)key;
-                                if (CcPresses.ContainsKey(key))
+
+                                foreach ((short key, float value) in buffer)
                                 {
-                                    CcPresses[key].KeyCode = vKey.ToString();
-                                    CcPresses[key].Press = value * 100.0;
-                                }
-                                else
-                                {
-                                    CcPresses.Add(key, new CcKeyPress()
+                                    Keys vKey = (Keys)key;
+                                    if (CcPresses.ContainsKey(key))
                                     {
-                                        KeyCode = vKey.ToString(),
-                                        Press = value * 100.0
-                                    });
+                                        CcPresses[key].KeyCode = vKey.ToString();
+                                        CcPresses[key].Press = value * 100.0;
+                                    }
+                                    else
+                                    {
+                                        CcPresses.Add(key, new CcKeyPress()
+                                        {
+                                            KeyCode = vKey.ToString(),
+                                            Press = value * 100.0
+                                        });
+                                    }
+
+                                    if (_keyIndex.Contains(vKey))
+                                    {
+                                        var ki = _keyIndex.IndexOf(vKey);
+                                        _keyPress[ki] = value;
+                                    }
                                 }
 
-                                if (_keyIndex.Contains(vKey))
+                                ProcessNotes();
+
+                                CcPresses.OnCollectionChanged();
+                                CcPressesList.Clear();
+                                foreach (var press in CcPresses.Values)
                                 {
-                                    var ki = _keyIndex.IndexOf(vKey);
-                                    _keyPress[ki] = value;
+                                    if (press.Press > 0.0)
+                                        CcPressesList.Add(press);
                                 }
+
+                                var looffs = 12 + LowOctaveNum * 12;
+                                var hioffs = 12 + HiOctaveNum * 12;
+
+                                LowOctave.UpdateBars(_notes, looffs);
+                                HighOctave.UpdateBars(_notes, hioffs);
                             }
-
-                            ProcessNotes();
-
-                            CcPresses.OnCollectionChanged();
-                            CcPressesList.Clear();
-                            foreach (var press in CcPresses.Values)
-                            {
-                                if(press.Press > 0.0)
-                                    CcPressesList.Add(press);
-                            }
-
-                            var looffs = 12 + LowOctaveNum * 12;
-                            var hioffs = 12 + HiOctaveNum * 12;
-
-                            LowOctave.UpdateBars(_notes, looffs);
-                            HighOctave.UpdateBars(_notes, hioffs);
                         }));
+                        if (result != WootingAnalogResult.Ok)
+                            Thread.Sleep(500);
                     }
                     catch (Exception e)
                     {
